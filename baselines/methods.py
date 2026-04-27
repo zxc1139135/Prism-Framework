@@ -1,16 +1,5 @@
 """
 Baseline MIA methods for comparison with Prism.
-All baselines require access to token-level probabilities (loss/perplexity),
-except as noted. This module provides a unified interface.
-
-Baselines:
-  - Zlib: ratio of sample loss to zlib compression entropy
-  - Neighborhood: compare loss to neighborhood-perturbed samples
-  - Min-k%++: enhanced Min-k% using top-k lowest token probabilities
-  - RMIA: reference model based MIA with likelihood ratios
-  - CAMIA: calibrated aggregated MIA
-  - CON-RECALL: consistency and recall based approach
-  - ICP-MIA: in-context perturbation based MIA
 """
 
 import math
@@ -27,10 +16,6 @@ from utils import get_logger
 logger = get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Shared utility: compute per-token log-probabilities
-# ---------------------------------------------------------------------------
-
 @torch.no_grad()
 def compute_token_logprobs(
     model: AutoModelForCausalLM,
@@ -41,7 +26,6 @@ def compute_token_logprobs(
 ) -> dict:
     """
     Compute per-token log-probabilities and loss for a text.
-
     Returns:
         dict with keys: 'loss', 'token_logprobs', 'perplexity', 'tokens'
     """
@@ -87,19 +71,7 @@ def compute_scores_batch(
         results.append(r)
     return results
 
-
-# ---------------------------------------------------------------------------
-# Baseline 1: Zlib
-# ---------------------------------------------------------------------------
-
 class ZlibBaseline:
-    """
-    Zlib entropy ratio baseline.
-    Score = loss(x) / zlib_entropy(x).
-    Lower ratio -> more likely member.
-    We negate for consistency (higher = more likely member).
-    """
-
     def __init__(self):
         self.name = "Zlib"
 
@@ -120,16 +92,7 @@ class ZlibBaseline:
         return np.array(scores)
 
 
-# ---------------------------------------------------------------------------
-# Baseline 2: Neighborhood
-# ---------------------------------------------------------------------------
-
 class NeighborhoodBaseline:
-    """
-    Neighborhood attack: compare target loss to average loss of perturbed neighbors.
-    Score = avg_neighbor_loss - target_loss (higher = more likely member).
-    """
-
     def __init__(self, n_neighbors: int = 10, perturb_ratio: float = 0.1):
         self.name = "Neighborhood"
         self.n_neighbors = n_neighbors
@@ -170,18 +133,7 @@ class NeighborhoodBaseline:
             scores.append(avg_neighbor_loss - ts["loss"])
         return np.array(scores)
 
-
-# ---------------------------------------------------------------------------
-# Baseline 3: Min-k%++
-# ---------------------------------------------------------------------------
-
 class MinKPlusPlusBaseline:
-    """
-    Min-k%++ baseline.
-    Uses the average of the k% lowest token log-probabilities,
-    normalized by the mean and std of all token log-probs.
-    """
-
     def __init__(self, k_percent: float = 0.2):
         self.name = "Min-k%++"
         self.k_percent = k_percent
@@ -210,18 +162,7 @@ class MinKPlusPlusBaseline:
             scores.append(np.mean(bottom_k))
         return np.array(scores)
 
-
-# ---------------------------------------------------------------------------
-# Baseline 4: RMIA (Reference Model based)
-# ---------------------------------------------------------------------------
-
 class RMIABaseline:
-    """
-    Reference Model based MIA.
-    Uses likelihood ratio between target and reference model.
-    Score = loss_ref(x) - loss_target(x).
-    """
-
     def __init__(self):
         self.name = "RMIA"
 
@@ -242,17 +183,7 @@ class RMIABaseline:
         return np.array(scores)
 
 
-# ---------------------------------------------------------------------------
-# Baseline 5: CAMIA (Calibrated Aggregated MIA)
-# ---------------------------------------------------------------------------
-
 class CAMIABaseline:
-    """
-    Calibrated Aggregated MIA.
-    Aggregates multiple membership signals with calibration.
-    Simplified: uses loss + min-k + zlib ratio, z-score normalized.
-    """
-
     def __init__(self):
         self.name = "CAMIA"
 
@@ -282,17 +213,7 @@ class CAMIABaseline:
         # Aggregate: equal weights
         return normed.sum(axis=1)
 
-
-# ---------------------------------------------------------------------------
-# Baseline 6: CON-RECALL (Consistency and Recall)
-# ---------------------------------------------------------------------------
-
 class CONRECALLBaseline:
-    """
-    CON-RECALL: combines loss-based consistency with recall signals.
-    Uses perplexity as primary signal with calibration from reference.
-    """
-
     def __init__(self):
         self.name = "CON-RECALL"
 
@@ -321,18 +242,7 @@ class CONRECALLBaseline:
             scores.append(np.log(ppl_ratio + 1e-8) + recall)
         return np.array(scores)
 
-
-# ---------------------------------------------------------------------------
-# Baseline 7: ICP-MIA (In-Context Perturbation)
-# ---------------------------------------------------------------------------
-
 class ICPMIABaseline:
-    """
-    In-Context Perturbation based MIA.
-    Measures sensitivity of model loss to in-context perturbations.
-    Members show more stable loss under perturbation.
-    """
-
     def __init__(self, n_perturbations: int = 5):
         self.name = "ICP-MIA"
         self.n_perturbations = n_perturbations
@@ -371,9 +281,6 @@ class ICPMIABaseline:
         return np.array(scores)
 
 
-# ---------------------------------------------------------------------------
-# Unified interface
-# ---------------------------------------------------------------------------
 
 BASELINE_MAP = {
     "zlib": ZlibBaseline,

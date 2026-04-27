@@ -1,30 +1,5 @@
 """
 Calibration module for Prism.
-
-Unified pseudo-label calibration with 4 selectable modes:
-
-1) compact
-   - score-tail selection
-   - compactness filtering inside each tail
-
-2) asymmetric
-   - separate positive / negative quantiles
-
-3) extreme
-   - keep only the most extreme positive / negative tails
-   - large grey zone ignored
-
-4) selftrain
-   - initial pseudo-labels from contrastive score
-   - provisional attack fit
-   - refined scores from provisional model
-   - rebuild pseudo-labels and fit final model
-
-This file is designed to be a full drop-in replacement for the current
-calibration.py while remaining compatible with:
-- pipeline.py
-- attack.py
-- config.py
 """
 
 from typing import Dict, Tuple
@@ -38,10 +13,6 @@ from utils import get_logger
 
 logger = get_logger(__name__)
 
-
-# ---------------------------------------------------------------------
-# Robust statistics helpers
-# ---------------------------------------------------------------------
 def _safe_median(x: np.ndarray, axis=0) -> np.ndarray:
     return np.median(x, axis=axis)
 
@@ -68,19 +39,6 @@ def _robust_standardize(features: np.ndarray) -> Tuple[np.ndarray, Dict]:
     }
     return z, meta
 
-
-# ---------------------------------------------------------------------
-# Polarity / weight estimation
-# ---------------------------------------------------------------------
-
-# Domain-aware polarity for MIA on cosine-similarity features.
-# Feature order in full8 mode: [mean, std, min, max, q10, q90, median, iqr]
-#
-# Members (seen during fine-tuning) produce more consistent continuations,
-# which means HIGHER mean/min/max/q10/q90/median cosine similarity and
-# LOWER std/iqr (less spread).  So:
-#   polarity = [+1, -1, +1, +1, +1, +1, +1, -1]
-# "Higher score → more likely member" after applying polarity.
 DOMAIN_POLARITY_FULL8 = np.array([+1, -1, +1, +1, +1, +1, +1, -1], dtype=np.float64)
 DOMAIN_POLARITY_CLASSIC4 = np.array([+1, -1, +1, +1], dtype=np.float64)
 DOMAIN_POLARITY_ROBUST4 = np.array([+1, -1, +1, +1], dtype=np.float64)
@@ -100,13 +58,6 @@ def _estimate_dimension_polarity_and_weight(
     z: np.ndarray,
     polarity_mode: str = "auto",
 ) -> Tuple[np.ndarray, np.ndarray, Dict]:
-    """
-    Estimate per-dimension polarity and weight from the feature pool itself.
-
-    polarity_mode:
-        "auto"   – data-driven estimation (fixed: uses delta[j] not delta.sum())
-        "domain" – use MIA domain knowledge
-    """
     n, d = z.shape
     polarity = np.ones(d, dtype=np.float64)
     weights = np.ones(d, dtype=np.float64)
@@ -117,7 +68,6 @@ def _estimate_dimension_polarity_and_weight(
         polarity = _get_domain_polarity(d)
         logger.info(f"Using domain-aware polarity: {polarity.tolist()}")
     else:
-        # Data-driven polarity — FIXED: use delta[j] for dimension j
         for j in range(d):
             hi_thr = np.quantile(z[:, j], 0.80)
             lo_thr = np.quantile(z[:, j], 0.20)
@@ -153,12 +103,10 @@ def _estimate_dimension_polarity_and_weight(
                 }
             )
 
-    # Compute weights using inter-quartile spread as discriminative power
     for j in range(d):
         q75 = np.quantile(z[:, j], 0.75)
         q25 = np.quantile(z[:, j], 0.25)
         spread = abs(float(q75 - q25))
-        # Kurtosis as a bonus: heavy-tailed dimensions have more extreme separation
         col = z[:, j]
         mu4 = float(np.mean((col - col.mean()) ** 4))
         sigma2 = float(np.var(col)) + 1e-8
@@ -174,9 +122,6 @@ def _estimate_dimension_polarity_and_weight(
     return polarity, weights, meta
 
 
-# ---------------------------------------------------------------------
-# Score construction
-# ---------------------------------------------------------------------
 def compute_contrastive_scores(
     features: np.ndarray,
     cfg: AttackConfig = None,
@@ -196,7 +141,6 @@ def compute_contrastive_scores(
 
     signed = z * polarity.reshape(1, -1)
 
-    # Simple weighted sum — no nonlinear mixing to reduce noise amplification
     scores = signed @ weights
 
     meta = {
@@ -221,9 +165,6 @@ def compute_contrastive_scores(
     return scores, meta
 
 
-# ---------------------------------------------------------------------
-# Utility helpers for pseudo labels
-# ---------------------------------------------------------------------
 def _normalize_rows(x: np.ndarray) -> np.ndarray:
     norm = np.linalg.norm(x, axis=1, keepdims=True) + 1e-8
     return x / norm
@@ -262,9 +203,6 @@ def _safe_cfg_get(cfg: AttackConfig, name: str, default):
     return getattr(cfg, name, default)
 
 
-# ---------------------------------------------------------------------
-# Pseudo-label mode A: compact
-# ---------------------------------------------------------------------
 def _construct_pseudo_labels_compact(
     features: np.ndarray,
     scores: np.ndarray,
@@ -350,9 +288,6 @@ def _construct_pseudo_labels_compact(
     }
 
 
-# ---------------------------------------------------------------------
-# Pseudo-label mode B: asymmetric
-# ---------------------------------------------------------------------
 def _construct_pseudo_labels_asymmetric(
     features: np.ndarray,
     scores: np.ndarray,
@@ -399,9 +334,6 @@ def _construct_pseudo_labels_asymmetric(
     }
 
 
-# ---------------------------------------------------------------------
-# Pseudo-label mode C: extreme
-# ---------------------------------------------------------------------
 def _construct_pseudo_labels_extreme(
     features: np.ndarray,
     scores: np.ndarray,
@@ -452,9 +384,6 @@ def _construct_pseudo_labels_extreme(
     }
 
 
-# ---------------------------------------------------------------------
-# Basic constructor for self-training
-# ---------------------------------------------------------------------
 def _construct_pseudo_labels_basic(
     features: np.ndarray,
     scores: np.ndarray,
@@ -495,23 +424,11 @@ def _construct_pseudo_labels_basic(
     }
 
 
-# ---------------------------------------------------------------------
-# Main pseudo-label routing
-# ---------------------------------------------------------------------
 def construct_pseudo_labels(
     features: np.ndarray,
     scores: np.ndarray,
     cfg: AttackConfig,
 ) -> Dict:
-    """
-    Unified pseudo-label construction entry.
-
-    Supported modes:
-    - compact
-    - asymmetric
-    - extreme
-    - selftrain  (only for external compatibility; main loop handled in calibrate)
-    """
     mode = str(_safe_cfg_get(cfg, "pseudo_label_mode", "compact")).lower()
 
     if mode == "compact":
@@ -524,8 +441,6 @@ def construct_pseudo_labels(
         return _construct_pseudo_labels_extreme(features, scores, cfg)
 
     if mode == "selftrain":
-        # selftrain is handled in calibrate() as a 2-stage procedure.
-        # here we expose a compatible basic constructor if called directly.
         min_per_class = int(_safe_cfg_get(cfg, "pseudo_min_per_class", 30))
         max_per_class = int(_safe_cfg_get(cfg, "pseudo_max_per_class", 80))
         p = float(_safe_cfg_get(cfg, "init_quantile_p", 0.95))
@@ -549,20 +464,6 @@ def construct_pseudo_labels(
 # Main calibration API
 # ---------------------------------------------------------------------
 def calibrate(features: np.ndarray, cfg: AttackConfig, device: str = "cuda"):
-    """
-    Main calibration entry.
-
-    If pseudo_label_mode == "selftrain":
-        - initial pseudo-labels from contrastive scores
-        - provisional attack fit
-        - refined scores from provisional model
-        - rebuild pseudo-labels
-        - fit final model
-
-    Otherwise:
-        - one-shot pseudo-label construction via selected mode
-        - fit attack model
-    """
     scores, score_meta = compute_contrastive_scores(features, cfg=cfg)
     mode = str(_safe_cfg_get(cfg, "pseudo_label_mode", "compact")).lower()
 
@@ -663,9 +564,6 @@ def calibrate(features: np.ndarray, cfg: AttackConfig, device: str = "cuda"):
     return attack_model, meta
 
 
-# ---------------------------------------------------------------------
-# Cross-fit API
-# ---------------------------------------------------------------------
 def crossfit_calibrate_and_infer(
     features: np.ndarray,
     cfg: AttackConfig,

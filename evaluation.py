@@ -1,7 +1,5 @@
 """
 Evaluation metrics: ROC-AUC, Accuracy, TPR@FPR.
-Supports the four FPR thresholds used in the paper:
-10%, 1%, 0.1%, 0.01%.
 """
 
 from typing import Dict, List

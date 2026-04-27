@@ -1,14 +1,16 @@
-# Prism: Consistency-based Membership Inference Attacks against Fine-Tuned LLMs
+# Consistent Outputs Reveal What You Trained On: Text-Only Membership Inference Attacks against Fine-Tuned LLMs
+
+
 
 ## Overview
 
-**Prism** is a strict black-box membership inference attack (MIA) framework targeting fine-tuned large language models (LLMs). Unlike prior MIA methods that rely on token-level probabilities, loss values, or expensive shadow models, Prism operates **solely on the generated text** returned by an API, making it directly applicable to commercial LLM deployments.
+**Prism** is a text-only membership inference attack (MIA) framework targeting fine-tuned large language models (LLMs). Unlike prior MIA methods that rely on token-level probabilities, loss values, or expensive shadow models, Prism operates **solely on the generated text** returned by an API, making it directly applicable to commercial LLM deployments.
 
 ### Core Insight: Output Consistency as a Membership Signal
 
 When the same input is queried multiple times with stochastic sampling, a fine-tuned LLM produces **semantically more consistent** outputs for training (member) samples than for unseen (non-member) samples. This is because fine-tuning concentrates the model's conditional probability distribution over training sequences, leading to more deterministic generation paths for memorized content.
 
-We term this phenomenon **output consistency** and formalize it as a statistically reliable membership signal — observable from text alone.
+We term this phenomenon **output consistency** and formalize it as a statistically reliable membership signal.
 
 ## Installation
 
@@ -125,8 +127,7 @@ Prism/
 ├── utils.py                # Logging, seeding, I/O helpers
 ├── requirements.txt        # Python dependencies
 └── baselines/
-    └── methods.py          # Zlib, Neighborhood, Min-k%++, RMIA,
-                            # CAMIA, CON-RECALL, ICP-MIA
+    └── methods.py          # Zlib, Neighborhood, Min-k%++, RMIA, CAMIA, CON-RECALL, ICP-MIA
 ```
 
 ---
@@ -173,7 +174,7 @@ All settings are managed through dataclasses in `config.py`.
 
 ## Supported Models and Datasets
 
-**Models** (HuggingFace identifiers):
+**Models**:
 
 | Short name | HuggingFace path |
 |-----------|-----------------|

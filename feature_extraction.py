@@ -1,12 +1,5 @@
 """
 Stage II: Statistical Distribution Characterization.
-
-Improved 8D version:
-- Encodes generated continuations with a sentence encoder
-- Computes pairwise cosine similarities
-- Extracts richer 8D statistics:
-    [mean, std, min, max, q10, q90, median, iqr]
-- Backward-compatible with old config.py
 """
 
 from typing import List
@@ -23,16 +16,6 @@ logger = get_logger(__name__)
 
 
 class FeatureExtractor:
-    """
-    Encodes outputs, computes pairwise cosine similarities,
-    and returns a feature vector per sample.
-
-    Supported feature modes:
-    - "classic4": [mean, std, min, max]
-    - "robust4" : [mean, std, q10, q90]
-    - "full8"   : [mean, std, min, max, q10, q90, median, iqr]
-    """
-
     def __init__(self, cfg: AttackConfig, device: str = "cuda"):
         self.cfg = cfg
         self.device = device
@@ -45,10 +28,6 @@ class FeatureExtractor:
 
     @torch.no_grad()
     def encode(self, texts: List[str]) -> np.ndarray:
-        """
-        Encode texts into L2-normalized embeddings so cosine similarity
-        can be computed as a dot product.
-        """
         embeddings = self.encoder.encode(
             texts,
             batch_size=64,
@@ -60,10 +39,6 @@ class FeatureExtractor:
 
     @staticmethod
     def pairwise_cosine(embeddings: np.ndarray) -> np.ndarray:
-        """
-        Compute all C(m,2) pairwise cosine similarities.
-        Since embeddings are L2-normalized, cosine = dot product.
-        """
         if embeddings.ndim != 2:
             raise ValueError(f"embeddings must be 2D, got shape={embeddings.shape}")
 
@@ -81,10 +56,6 @@ class FeatureExtractor:
 
     @staticmethod
     def extract_statistics_classic4(scores: np.ndarray) -> np.ndarray:
-        """
-        4D classic feature:
-            [mean, std, min, max]
-        """
         if len(scores) == 0:
             return np.zeros(4, dtype=np.float64)
 
@@ -96,10 +67,6 @@ class FeatureExtractor:
 
     @staticmethod
     def extract_statistics_robust4(scores: np.ndarray) -> np.ndarray:
-        """
-        4D robust feature:
-            [mean, std, q10, q90]
-        """
         if len(scores) == 0:
             return np.zeros(4, dtype=np.float64)
 
@@ -111,10 +78,6 @@ class FeatureExtractor:
 
     @staticmethod
     def extract_statistics_full8(scores: np.ndarray) -> np.ndarray:
-        """
-        8D full feature:
-            [mean, std, min, max, q10, q90, median, iqr]
-        """
         if len(scores) == 0:
             return np.zeros(8, dtype=np.float64)
 
@@ -186,9 +149,6 @@ class FeatureExtractor:
     ) -> np.ndarray:
         """
         Extract feature vectors for all samples.
-
-        Returns:
-            (N, D) array where D is 4 or 8 depending on feature_mode
         """
         features = []
         diag_scores = []

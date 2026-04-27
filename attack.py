@@ -1,16 +1,5 @@
 """
 Stage III: Strategic Membership Inference.
-
-Improved version:
-- Prism-T:
-    * feature standardization before projection
-    * optional low-FPR-oriented threshold selection
-- Prism-L:
-    * optional PCA before Gaussian modeling
-    * covariance mode: full / shared / diagonal
-- Prism-C:
-    * deeper MLP with BatchNorm + configurable dropout
-    * input dimension auto-adapts to current feature size
 """
 
 import copy
@@ -57,10 +46,6 @@ def _logpdf_full_gaussian(x: np.ndarray, mu: np.ndarray, sigma_inv: np.ndarray, 
         -0.5 * diff @ sigma_inv @ diff
     )
 
-
-# ---------------------------------------------------------------------
-# Prism-T
-# ---------------------------------------------------------------------
 class ThresholdAttack:
     def __init__(self, cfg: Optional[AttackConfig] = None):
         self.cfg = cfg
@@ -106,7 +91,7 @@ class ThresholdAttack:
         best_tau = 0.0
         best_metric = -1.0
 
-        # Option A: classic Youden J
+        # classic Youden J
         if self.threshold_selection == "youden":
             for tau in thresholds:
                 tpr = np.mean(proj_pos >= tau)
@@ -118,7 +103,7 @@ class ThresholdAttack:
                     best_tau = tau
             logger.info(f"Threshold attack fitted: tau={best_tau:.4f}, J={best_metric:.4f}")
 
-        # Option B: maximize TPR under target FPR
+        # maximize TPR under target FPR
         elif self.threshold_selection == "target_fpr":
             target_fpr = min(max(self.target_fpr, 0.0), 1.0)
 
@@ -170,9 +155,6 @@ class ThresholdAttack:
         return (self.score(features) >= self.tau).astype(np.int32)
 
 
-# ---------------------------------------------------------------------
-# Prism-L
-# ---------------------------------------------------------------------
 class LikelihoodRatioAttack:
     def __init__(self, cfg: Optional[AttackConfig] = None):
         self.cfg = cfg
@@ -219,10 +201,6 @@ class LikelihoodRatioAttack:
         return X
 
     def _auto_select_covariance_mode(self, n_pos: int, n_neg: int, d: int) -> str:
-        """
-        Fallback to simpler covariance when sample size is too small for the
-        requested mode, to avoid singular or poorly-conditioned matrices.
-        """
         requested = self.covariance_mode.lower()
         min_n = min(n_pos, n_neg)
 
@@ -306,7 +284,6 @@ class LikelihoodRatioAttack:
                 f"Choose from ['full', 'shared', 'diagonal']"
             )
 
-        # Store the actually used mode (may differ from requested due to fallback)
         self._actual_mode = mode
 
         # Calibrate threshold on training data using Youden's J
@@ -362,9 +339,6 @@ class LikelihoodRatioAttack:
         return (self.score(features) >= self.tau).astype(np.int32)
 
 
-# ---------------------------------------------------------------------
-# Prism-C
-# ---------------------------------------------------------------------
 class MLPClassifier(nn.Module):
     def __init__(self, input_dim: int, hidden_dims=None, dropout: float = 0.2):
         super().__init__()
@@ -466,9 +440,6 @@ class ClassifierAttack:
         return (self.score(features) >= 0.5).astype(np.int32)
 
 
-# ---------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------
 ATTACK_MAP = {
     "threshold": ThresholdAttack,
     "likelihood": LikelihoodRatioAttack,

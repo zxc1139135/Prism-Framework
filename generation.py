@@ -1,15 +1,5 @@
 """
 Stage I: Multi-query semantic quantification.
-
-Improved version:
-- Supports three decoding modes: sample / beam / greedy
-- Uses more conservative defaults when optional config fields are absent
-- More robust prompt handling and generation slicing
-
-Additional fixes:
-- Prevents overlong token sequences before prefix construction
-- Dynamically reserves room for generation within model context length
-- Avoids tokenizer/model max-length indexing issues
 """
 
 import math
@@ -32,12 +22,6 @@ GENERATION_TEMPLATE = (
 
 
 def _get_model_max_length(tokenizer: AutoTokenizer, default: int = 1024) -> int:
-    """
-    Return a safe effective max context length.
-
-    Some tokenizers expose a huge sentinel value for model_max_length,
-    so clamp to a conservative default in that case.
-    """
     model_max = getattr(tokenizer, "model_max_length", None)
 
     if model_max is None:
@@ -48,7 +32,6 @@ def _get_model_max_length(tokenizer: AutoTokenizer, default: int = 1024) -> int:
     except Exception:
         return default
 
-    # Hugging Face sometimes uses enormous sentinel values
     if model_max <= 0 or model_max > 100000:
         return default
 
@@ -60,19 +43,9 @@ def _get_safe_prefix_budget(
     cfg: AttackConfig,
     reserve_tokens: int = 128,
 ) -> int:
-    """
-    Budget for building the prefix from the raw source text.
-
-    We leave some room for:
-    - optional prompt template tokens
-    - generation tokens
-    - safety margin
-    """
     model_max = _get_model_max_length(tokenizer, default=1024)
     max_new = int(getattr(cfg, "max_gen_length", 64))
 
-    # Conservative reserve:
-    # prompt wrapper + generated continuation + a bit of slack
     budget = model_max - max_new - reserve_tokens
 
     # Keep it in a practical range
@@ -84,11 +57,6 @@ def _get_safe_prefix_budget(
 def build_prefix(text: str, tokenizer: AutoTokenizer, ratio: float, cfg: AttackConfig) -> str:
     """
     Build a prefix from a possibly long text safely.
-
-    Critical fix:
-    tokenize with truncation BEFORE computing prefix length, otherwise
-    tokenizer.encode(text) may exceed the model context window and emit:
-    "Token indices sequence length is longer than the specified maximum..."
     """
     safe_max_input = _get_safe_prefix_budget(tokenizer, cfg)
 
@@ -132,8 +100,6 @@ def _prepare_prompts(
 
 
 def _get_sampling_mode(cfg: AttackConfig) -> str:
-    # Backward-compatible: if config.py has not been updated yet,
-    # default to "sample".
     return getattr(cfg, "sampling_mode", "sample")
 
 
@@ -170,14 +136,6 @@ def _generate_batch_core(
     device: str,
     num_return: int,
 ) -> List[List[str]]:
-    """
-    Generate `num_return` continuations for each prompt in one batched call.
-
-    Notes:
-    - Uses LEFT padding for causal LM batched generation
-    - Supports sample / beam / greedy decoding
-    - Dynamically constrains prompt length to avoid context overflow
-    """
     if len(prompts) == 0:
         return []
 
@@ -231,7 +189,6 @@ def _generate_batch_core(
             )
         )
     elif sampling_mode == "greedy":
-        # Greedy only produces one output per prompt.
         # If num_return > 1, duplicate it so the downstream shape stays consistent.
         gen_kwargs.update(
             dict(
@@ -255,7 +212,6 @@ def _generate_batch_core(
                 results[i].append(gen_text)
         return results
 
-    # sample / beam:
     # outputs shape: (batch_size * num_return, padded_len + gen_len)
     for i in range(batch_size):
         for j in range(num_return):
@@ -299,10 +255,6 @@ def generate_all(
 ) -> List[List[str]]:
     """
     Generate m continuations for each text with batching.
-
-    Recommended for stable Prism diagnosis:
-    - sample mode with lower temperature
-    - or beam mode to reduce stochastic noise
     """
     model.eval()
 
@@ -315,8 +267,6 @@ def generate_all(
     m = int(getattr(cfg, "num_queries", 20))
     sampling_mode = _get_sampling_mode(cfg)
 
-    # For greedy, a query batch larger than 1 has no real meaning because
-    # each prompt only yields one unique continuation before duplication.
     if sampling_mode == "greedy":
         qbs = 1
     else:

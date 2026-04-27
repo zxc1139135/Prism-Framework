@@ -1,6 +1,5 @@
 """
 Batch experiment runner.
-Sweeps model x dataset x strategy combinations.
 """
 
 import argparse

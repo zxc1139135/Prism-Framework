@@ -1,9 +1,5 @@
 """
 Data loading for WikiMIA, MIMIR, XSum, and PubMed datasets.
-
-Critical fix:
-- query_members are now sampled from the ACTUAL fine-tuning set, so label=1
-  really means the target model saw the sample during fine-tuning.
 """
 
 from typing import Dict, List, Tuple
@@ -15,11 +11,6 @@ from config import DataConfig
 from utils import get_logger
 
 logger = get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Dataset-specific loaders
-# ---------------------------------------------------------------------------
 
 def _load_wikimia(cfg: DataConfig) -> Tuple[List[str], List[str]]:
     ds = load_dataset(
@@ -116,10 +107,6 @@ DATASET_LOADERS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-
 def _filter_short_texts(texts: List[str], min_length: int = 50) -> List[str]:
     return [t for t in texts if isinstance(t, str) and len(t.strip()) >= min_length]
 
@@ -163,22 +150,7 @@ def _top_up_to_target(
     result.extend(_sample_from_pool(backup_pool, need, rng, replace=replace))
     return result
 
-
-# ---------------------------------------------------------------------------
-# Public interface
-# ---------------------------------------------------------------------------
-
 def load_data(cfg: DataConfig, seed: int = 42) -> Dict:
-    """
-    Load dataset and prepare splits.
-
-    Returns dict with keys:
-        - finetune_texts: list[str]
-        - query_members: list[str]   (true members: sampled from finetune_texts)
-        - query_nonmembers: list[str]
-        - query_labels: np.ndarray
-        - query_texts: list[str]
-    """
     if cfg.name not in DATASET_LOADERS:
         raise ValueError(
             f"Unknown dataset: {cfg.name}. Choose from {list(DATASET_LOADERS.keys())}"

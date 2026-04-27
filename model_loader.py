@@ -1,13 +1,5 @@
 """
 Model loading utilities.
-Supports GPT-2 family, LLaMA-2, Mistral-7B, and Phi-2
-with optional LoRA adapters and quantization (float16/int8/int4).
-
-Engineering fix:
-- For float16 training / normal single-device usage, DO NOT use device_map="auto".
-- Only use device_map="auto" for int8/int4 quantized loading.
-This avoids Trainer / accelerate conflicts such as:
-"The model is already on multiple devices. Skipping the move to device specified in args."
 """
 
 from typing import Optional
@@ -61,7 +53,6 @@ def _move_model_to_device(model, device: str):
         return model.to("cuda")
     if device == "cpu":
         return model.to("cpu")
-    # fallback: let caller pass custom torch device strings if needed
     return model.to(device)
 
 
@@ -83,16 +74,13 @@ def load_base_model(
         f"Loading model: {hf_name} (quantization={quantization}, device={device})"
     )
 
-    # Quantized models: let HF/accelerate place them automatically.
+    # Quantized models.
     if quantization in ("int4", "int8"):
         kwargs["quantization_config"] = _get_quantization_config(quantization)
         kwargs["device_map"] = "auto"
         model = AutoModelForCausalLM.from_pretrained(**kwargs)
         return model
 
-    # Non-quantized / float16 path:
-    # IMPORTANT: do NOT use device_map='auto' here.
-    # This keeps the model on a single device, which is much safer for Trainer fine-tuning.
     if quantization == "float16":
         kwargs["dtype"] = torch.float16
     else:

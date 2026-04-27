@@ -1,6 +1,5 @@
 """
-Global configuration for the Prism MIA framework.
-Aligned with the paper defaults while keeping safer experimental controls.
+Global configuration.
 """
 
 from dataclasses import dataclass, field
@@ -52,7 +51,6 @@ class AttackConfig:
     calibration_mode: str = "crossfit"  # crossfit | same_pool
     crossfit_folds: int = 5
 
-    # Classifier (MLP) architecture: 4 -> 32 -> 32 -> 1
     mlp_hidden_dims: List[int] = field(default_factory=lambda: [128, 128, 64, 32])
     mlp_lr: float = 1e-3
     mlp_epochs: int = 500
@@ -78,9 +76,6 @@ class AttackConfig:
 
     pseudo_label_mode: str = "compact"  # compact | asymmetric | extreme | selftrain
 
-    # Polarity estimation for contrastive scoring
-    # "auto"   : estimate from data (improved per-dimension logic)
-    # "domain" : use MIA domain knowledge (member -> higher consistency)
     polarity_mode: str = "domain"  # auto | domain
 
     compactness_keep_ratio: float = 0.7

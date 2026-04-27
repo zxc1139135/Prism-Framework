@@ -103,7 +103,6 @@ class PrismPipeline:
             f"Stage III: Calibrating ({self.cfg.attack.strategy}, mode={self.cfg.attack.calibration_mode}) and inferring membership"
         )
 
-        # Diagnostic supervised path: use true labels directly
         if labels is not None and getattr(self.cfg.attack, "use_true_labels_for_debug", False):
             from attack import create_attack
 

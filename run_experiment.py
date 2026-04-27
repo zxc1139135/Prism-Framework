@@ -1,6 +1,5 @@
 """
 Main experiment runner for Prism.
-Supports full pipeline: data loading -> fine-tuning -> attack -> evaluation.
 """
 
 import argparse

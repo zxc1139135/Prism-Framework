@@ -1,6 +1,5 @@
 """
 Fine-tuning module.
-Safer single-GPU / low-memory LoRA fine-tuning for Prism.
 """
 
 import math
@@ -148,7 +147,6 @@ def _choose_micro_batch_size(requested_bs: int) -> int:
 
 @torch.no_grad()
 def compute_train_perplexity(model, dataset, device, batch_size: int = 4) -> float:
-    """计算训练集上的perplexity，用于验证模型记忆程度。越低说明记忆越深。"""
     loader = DataLoader(
         dataset,
         batch_size=batch_size,
@@ -178,7 +176,7 @@ def fine_tune(
     texts: List[str],
     cfg,
     output_dir: str = "./checkpoints",
-    target_perplexity: float = 5.0,   # 新增：目标困惑度，低于此值停止
+    target_perplexity: float = 5.0,
 ) -> str:
     set_seed(cfg.seed)
     ensure_dir(output_dir)
@@ -235,7 +233,6 @@ def fine_tune(
 
     visible_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
 
-    # ---- 关键修改：逐epoch训练 + perplexity监控 ----
     best_ppl = float("inf")
     save_path = os.path.join(output_dir, "lora_adapter")
 
@@ -243,7 +240,7 @@ def fine_tune(
         training_args = TrainingArguments(
             output_dir=output_dir,
             overwrite_output_dir=True,
-            num_train_epochs=1,             # 每次只跑1个epoch
+            num_train_epochs=1,
             per_device_train_batch_size=per_device_bs,
             gradient_accumulation_steps=grad_accum,
             learning_rate=cfg.train.learning_rate,
@@ -251,7 +248,7 @@ def fine_tune(
             lr_scheduler_type="cosine",
             warmup_ratio=cfg.train.warmup_ratio if epoch == 1 else 0.0,
             logging_steps=10,
-            save_strategy="no",             # 手动保存
+            save_strategy="no",
             fp16=torch.cuda.is_available(),
             bf16=False,
             seed=cfg.seed,
@@ -275,18 +272,15 @@ def fine_tune(
 
         trainer.train()
 
-        # 计算并记录 perplexity
         ppl = compute_train_perplexity(model, dataset, model_device, batch_size=4)
         logger.info(f"Epoch {epoch}/{cfg.train.num_epochs} — Train Perplexity: {ppl:.2f}")
 
-        # 保存最优 checkpoint
         if ppl < best_ppl:
             best_ppl = ppl
             model.save_pretrained(save_path)
             tokenizer.save_pretrained(save_path)
             logger.info(f"  → Best checkpoint saved (ppl={ppl:.2f})")
 
-        # Early stopping：达到目标困惑度即停止
         if ppl <= target_perplexity:
             logger.info(f"Target perplexity {target_perplexity} reached at epoch {epoch}. Stopping.")
             break
